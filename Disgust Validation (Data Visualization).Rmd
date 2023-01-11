@@ -3,11 +3,6 @@ title: "Validating Measures of Prejudice and Disgust"
 output: html_notebook
 ---
 
----
-title: "R Notebook"
-output: html_notebook
----
-
 In this project I am interested in how a respondent's behavior changes when given
 different information about the individual. I have three hypothetical individuals,
 1) an ingroup member 2) a violent individual 3) and an infected individual. 
