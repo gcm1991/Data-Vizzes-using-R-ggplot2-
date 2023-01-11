@@ -1,0 +1,433 @@
+---
+title: "Validating Measures of Prejudice and Disgust"
+output: html_notebook
+---
+
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+In this project I am interested in how a respondent's behavior changes when given
+different information about the individual. I have three hypothetical individuals,
+1) an ingroup member 2) a violent indiviudall 3) and an infected individual. 
+
+```{r setup}
+
+rm(list = ls())
+
+setwd("C:/Users/cayde/OneDrive/Data Science/R Projects/Data Visualization") #Home
+
+library(dplyr) 
+library(tidyr)
+library(ggplot2)
+
+behavior_raw <- read.csv("Disgust Validation Project_December 2, 2022_12.11.csv")
+
+```
+
+This is a small pilot data set that I ran on my undergraduate students. I use 
+their Survey ID to get the valid responses and filter accordingly. 
+
+```{r}
+
+valid_responses <- c("3489", "5138", "2602", "9313", "6019", "1169", 
+                     "5971", "8276", "6284", "1466", "2194", "7636", "2208", 
+                     "1533", "9658")
+
+behavior_raw <- filter(behavior_raw, SURVEY.ID %in% valid_responses)
+
+```
+
+Next I identify the relevant variables. I do this by creating 
+character vectors so I can subset my data. The first vector I create is called 
+'covariates' and is simply information about the target individual. More 
+importantly is the behavior questions, which I put in the "ingroup" varnames.
+
+```{r}
+
+#Cleaning the data and assigning names to be used for subsetting
+#################################################################
+
+covariate_names <- c("ResponseId", "Name1", "Name2", "Name3", "Age1", 
+                     "Num_Siblings1", "Age2", "Num_Siblings2", "Age3", 
+                     "Num_Siblings3", "Hobbies1", "Hobbies2", "Hobbies3", 
+                     "Name", "Age", "Num_Siblings", "Hobbies")
+
+ingroup_varnames <- c("feeling_1", "toilet_seat", "personal", "party", "hug", 
+                      "food_utensils", "drinking", "roommate", "elevator", "borrow", 
+                      "mail", "concert", "open.carry", "background", "overtime",
+                      "holiday", "transaction", "road", "sheets", "food_prep", 
+                      "clothes", "gas", "neighbor")
+```
+
+Because I asked the same set of questions for all three individuals, Qualtrics
+labels repeat questions with a .1 or .2. I take advantage of this pattern and
+use the addendum to identify the questions asked towards the violent and 
+infected individuals. 
+
+```{r}
+
+infected_addendum <- ".1"
+violent_addendum <- ".2"
+
+infected_varnames <- sapply(ingroup_varnames, function(x){paste0(x, infected_addendum)})
+violent_varnames <- sapply(ingroup_varnames, function(x){paste0(x, violent_addendum)})
+
+```
+
+Here I remove the metadata by subsetting the data on my variables of interest.
+
+```{r}
+
+#Removing Rows and Columns
+behavior <- behavior_raw[-c(1,2),]
+behavior <- behavior[,c(ingroup_varnames, infected_varnames, violent_varnames, covariate_names)]
+
+```
+
+Standard data transformation in which I convert the string variable to a numeric
+for data analysis.
+
+```{r}
+
+# Convert the Likert scale to numeric
+#####################################
+
+first_var<- which(colnames(behavior) == "toilet_seat")
+last_var <- which(colnames(behavior) == "neighbor.2")
+
+for(column in first_var:last_var){
+  if(grepl("feeling", names(behavior[column]))){next}
+  behavior[, column] <- recode(behavior[, column], "Very comfortable" = 1,
+                               "Comfortable" = 2,
+                               "Neutral" = 3,
+                               "Uncomfortable" = 4,
+                               "Very uncomfortable" = 5)
+}
+
+```
+
+Using my previously created character vectors, I subset the data by the type 
+of individual. Since there are three individuals (ingroup, infected, violent) I
+have three new data sets. Once in their new dataframe, I remove the .1 and .2
+in order to have the variable names match. 
+
+```{r}
+
+# Creating a score for each battery
+###################################
+
+#subsetting data by treatment
+
+
+ingroup <- behavior[,c(ingroup_varnames, covariate_names)]
+infected <- behavior[,c(infected_varnames, covariate_names)]
+violent <- behavior[,c(violent_varnames, covariate_names)]
+
+#renaming the question names to avoid the duplicate naming conventions
+names(infected) <- gsub(pattern = infected_addendum, replacement = "", x = names(infected), fixed = TRUE)
+names(violent) <- gsub(pattern = violent_addendum, replacement = "", x = names(violent), fixed = TRUE)
+```
+
+I am going to aggregate the data in the three new data frames and create new 
+data set. To keep track of where the data comes from, I created
+a treatment variable that corresponds to the conidtion of the individual. 
+
+```{r}
+#Creating a treatment variable 
+ingroup$treatment <- "ingroup"
+infected$treatment <- "infected"
+violent$treatment <- "violent"
+
+```
+
+The behavioral questions I have are based on two factors: disgust and general. 
+I create character vectors to partition the questions based on these two 
+dimensions. 
+
+```{r}
+
+#Creating total prejudice scores based on type
+
+disgust_varnames <- c("toilet_seat", "personal", "party", "hug", "food_utensils",
+                      "drinking", "roommate", "elevator", "sheets", "food_prep", 
+                      "clothes")
+
+general_varnames <- c("borrow", "mail", "concert", "open.carry", "background",
+                      "overtime", "holiday", "transaction", "road", "gas", "neighbor")
+
+```
+
+Next, I simply add up the responses to the behavioral questions to get an index.
+I do these for all of my 3 subsets. I then standardize the data. 
+
+```{r}
+
+ingroup$disgust <- rowSums(ingroup[,disgust_varnames])
+ingroup$general <- rowSums(ingroup[,general_varnames])
+
+infected$disgust <- rowSums(infected[,disgust_varnames])
+infected$general <- rowSums(infected[,general_varnames])
+
+violent$disgust <- rowSums(violent[,disgust_varnames])
+violent$general <- rowSums(violent[,general_varnames])
+
+# Creating standardized scales of scores
+
+ingroup$disgust_s <- (ingroup$disgust - length(disgust_varnames))/(length(disgust_varnames)*5 - length(disgust_varnames))
+ingroup$general_s <- (ingroup$general - length(general_varnames))/(length(general_varnames)*5 - length(general_varnames))
+
+infected$disgust_s <- (infected$disgust - length(disgust_varnames))/(length(disgust_varnames)*5 - length(disgust_varnames))
+infected$general_s <- (infected$general - length(general_varnames))/(length(general_varnames)*5 - length(general_varnames))
+
+violent$disgust_s <- (violent$disgust - length(disgust_varnames))/(length(disgust_varnames)*5 - length(disgust_varnames))
+violent$general_s <- (violent$general - length(general_varnames))/(length(general_varnames)*5 - length(general_varnames))
+
+```
+
+I rename the original data set to 'wide' because the data is in a wide format. 
+I then merge the 3 data sets with the transformed data. Because I created a
+treatment variable, I know which data belongs to which individual when it is in
+the merged data set. I also create a new 'total' index which is a combination
+of the disgust and general behaviors. 
+
+```{r}
+
+#Recombining the data to have it in 'long' format
+
+behavior_wide <- behavior #renaming the original data set to preserve data
+
+names(infected)[!names(infected) == names(ingroup)]
+names(ingroup)[!names(infected) == names(ingroup)]
+
+behavior <- rbind(ingroup, infected, violent)
+
+# Adding a category of total prejudice
+behavior$total <- behavior$disgust + behavior$general
+behavior$total_s <- (behavior$total - length(c(disgust_varnames, general_varnames)))/(length(c(disgust_varnames, general_varnames))*5 - length(c(disgust_varnames, general_varnames)))
+
+
+#Cleaning up the environment
+rm(list = ls()[!ls() %in% c("behavior", "disgust_varnames", "disgust_varnames_R", "general_varnames_R", "general_varnames", "ingroup", "infected", "violent")])
+behavior <- behavior[,c("ResponseId", "feeling_1", "total", "total_s", "disgust", "disgust_s", "general", "general_s", "treatment", disgust_varnames, general_varnames)]
+
+```
+
+I am principally interested in how the condition of the target individual affects
+the respondent's behavior. I expect that disgust-related behaviors are going to 
+change when the individual is infected, and that general-related behaviors are
+going to change when the target is violent.To see if this is the case, I create 
+graphs that seperate the behavioral responses by individual type.
+
+The first graph demonstrates how behavior changes based on the targets' condition.
+Higher values indicate more negative attitudes and avoident behaviors. 
+
+```{r}
+
+behavior_long <- gather(behavior, "type", "outcome", c(disgust, general)) #converting to long form for the graph
+
+ggplot(behavior_long, mapping = aes(x = type, y = outcome, fill = treatment)) +
+  geom_boxplot() +
+  ylab("Prejudice") +
+  xlab("Type")
+
+
+
+```
+
+Looking at the graph, we can see that respondents have much greater 
+disgust prejudice towards the infected individual than the ingroup. However, 
+the respondents are equally 'disgusted' by the violent and infected individual. 
+This suggests that the disgust measurements are picking up on something else. 
+The general prejudice measure fares better. Respondents are much more prejudiced
+against a violent individual than both the infected and ingroup individual. 
+
+To see what is causing this, I disaggregate the responses by question type. The
+goal of this project is to identify questions that seperate disgust-related 
+prejudice from general prejudice. 
+
+```{r}
+
+#################
+# Data Visualization 
+################
+
+##############################
+# Plotting Means for Questions
+
+# Original
+
+question_means <- behavior %>%
+  group_by(treatment) %>%
+  summarize_at(vars(c(disgust_varnames, general_varnames)), list(avg = mean))
+
+question_sds <- behavior %>%
+  group_by(treatment) %>%
+  summarize_at(vars(c(disgust_varnames, general_varnames)), list(std = sd))
+
+question_means_long <- gather(question_means, "question", "average", names(question_means)[-1])
+question_sds_long <- gather(question_sds, "question", "standard_deviation", names(question_sds)[-1])
+
+question_stats <- cbind(question_means_long, question_sds_long[,3])
+
+pd <- position_dodge(width = 0.5)
+
+x_labels <- c("Background Check", "Borrow 50 Bucks", "Wear Old Clothes", 
+              "Give Concert Tickets", "Share Water Bottle", "Share Elevator", 
+              "Food Prep Hands", "Share Food Utensils", "Gas Station Night", 
+              "Time Off Holiday", "Hug", "Check Mail Vacation", "Neighbor", 
+              "Open-Carry Firearm", "Time Off Work", "Invite to Party",
+              "Use Personal Items", "Help w/ Car Trouble", "Roomate",
+              "Share Bedsheets", "Share Public Toilet", "Online Transaction")
+
+ggplot(question_stats, aes(x = question, y = average, color = treatment)) +
+  geom_errorbar(aes(ymin = average - standard_deviation, ymax = average + standard_deviation), position = pd) +
+  geom_point(position = pd) +
+  theme(axis.text.x = element_text(angle = -90)) +
+  scale_x_discrete(labels = x_labels) +
+  ylab("Discomfort") +
+  xlab("Social Scenario") +
+  ggtitle("Treatment Effects for each Survey Item") +
+  guides(color = guide_legend("Individual Type"))
+
+```
+
+Here we can see how the questions are performing. Certain behaviors like sharing
+a water bottle or food utensils are greatly impacted by whether the target 
+individual is infected, but not violent. Conversely other behavior like 
+meeting someone at a gas station late at night or being neighbors is greatly 
+impacted by whether the individual is violent but not whether they are infected.
+Certain items such as hugging, invitation to parties, and roommates, are equally
+repulsive for violent and infected individuals. I had hypothesized that these
+behaviors were' disgust-related' behaviors.
+
+To refine my battery, I take out the items that show little separation between
+infected and violent individuals. A couple items, such has sharing bed sheets, 
+showed little separation, but I have strong theoretical reasons to believe that
+these items 'should' be showing separation. I thus keep them in. I now have a 
+condensed and refined battery. 
+
+```{r}
+
+# Creating a vector of covariate labels for a revised battery 
+
+disgust_varnames_R <- c("toilet_seat", "personal", "food_utensils",
+                        "drinking", "sheets", "food_prep", 
+                        "clothes")
+
+general_varnames_R <- c("open.carry", "background",
+                        "road", "gas", "neighbor")
+
+
+question_means_R <- behavior %>%
+  group_by(treatment) %>%
+  summarize_at(vars(c(disgust_varnames_R, general_varnames_R)), list(avg = mean))
+
+question_sds_R <- behavior %>%
+  group_by(treatment) %>%
+  summarize_at(vars(c(disgust_varnames_R, general_varnames_R)), list(std = sd))
+
+question_means_long_R <- gather(question_means_R, "question", "average", names(question_means_R)[-1])
+question_sds_long_R <- gather(question_sds_R, "question", "standard_deviation", names(question_sds_R)[-1])
+
+question_stats_R <- cbind(question_means_long_R, question_sds_long_R[,3])
+
+pd <- position_dodge(width = 0.5)
+
+x_labels_R <- c("Background Check (Physical)", "Wear Old Clothes (Pathogen)", "Share Water Bottle (Pathogen)",  
+              "Food Prep Hands (Pathogen)", "Share Food Utensil (Pathogen)s", "Gas Station Night (Physical)", 
+              "Neighbor (Physical)", "Open-Carry Firearm (Physical)", "Use Personal Items (Pathogen)", "Help w/ Car Trouble (Physical)", 
+              "Share Bedsheets (Pathogen)", "Share Public Toilet (Pathogen)")
+
+ggplot(question_stats_R, aes(x = question, y = average, color = treatment)) +
+  geom_errorbar(aes(ymin = average - standard_deviation, ymax = average + standard_deviation), position = pd) +
+  geom_point(position = pd) +
+  theme(axis.text.x = element_text(angle = -85)) +
+  scale_x_discrete(labels = x_labels_R) +
+  ylab("Discomfort") +
+  xlab("Social Scenario") +
+  ggtitle("Treatment Effects for each Survey Item") +
+  guides(color = guide_legend("Individual Type"))
+
+```
+
+With the revised and relabeled graph we can see much better results. The 
+variables labeled "Physical" should result in more prejudice against violent
+individuals. This is the case for every single variable. The variables labeled
+"Pathogen" should result in more prejudice against infected individuals. Once
+again this is true of every variable. 
+
+Now that we have a more defined battery, let's look at the overall treatment 
+effects. 
+
+```{r}
+
+####################
+# Treatment Effects
+
+behavior_R <- behavior[, c("ResponseId", "treatment", "feeling_1", "total", disgust_varnames_R, general_varnames_R)]
+
+behavior_R$disgust <- rowSums(behavior_R[,disgust_varnames_R])
+behavior_R$general <- rowSums(behavior_R[,general_varnames_R])
+
+behavior_long_R <- gather(behavior_R, "type", "outcome", c(disgust, general))
+
+ggplot(behavior_long_R, mapping = aes(x = type, y = outcome, fill = treatment)) +
+  geom_boxplot() +
+  ylab("Prejudice") +
+  xlab("Type")
+
+```
+
+Here we see that respondents display much greater disgust-prejudice against 
+individuals who are infected than both ingroup and violent individuals. 
+Conversely we see that respondents display much greater threat or general-
+prejudice against individuals who are violent. 
+
+The last step of the process is to show that these behaviors that I have 
+measured correlate to more traditional measures of prejudice. To show this I 
+I use the combined index that I created earlier and plot it against the feeling
+thermometer ratings that I obtained for the individual. Feeling thermometers
+are a classic measurement in social science that measures how 'cold' or 'warm'
+you feel towards an individual or group of people. 
+
+```{r}
+
+# Correlations
+
+behavior_clean_R <- filter(behavior, feeling_1 >= 0)
+behavior_clean_R$feeling_1 <- as.numeric(behavior_clean_R$feeling_1)
+
+general_model_R <- lm(feeling_1 ~ total, data = behavior_clean_R)
+
+ggplot(behavior_clean_R, mapping = aes(x = total_s, y = feeling_1)) +
+  geom_point() +
+  geom_smooth(method = 'lm') +
+  ylab("Feeling Thermometer") +
+  xlab("Prejudice (Disgust & Non-Disgust)")
+
+```
+
+The graph shows a decently strong correlation between the two measures, 
+indicating that the attitudes and behaviors I measured are in fact picking up
+on prejudice. 
+
+Finally I show that individuals who were infected or violent recieved higher
+amounts of prejudice and lower feeling thermometers.
+
+```{r}
+
+ggplot(behavior_clean_R, mapping = aes(x = total_s, y = feeling_1, color = treatment)) +
+  geom_point() +
+  geom_smooth(method = 'lm', se = FALSE) +
+  ylab("Feeling Thermometer") +
+  xlab("Prejudice (Disgust & Non-Disgust)")
+  
+```
+
+In conclusion it is possible to disentangle prejudicial attitudes towards
+individuals that are based on disgsut and those that are based on disgust. 
+Visualizing the data helped me refine my measurements and more accurately 
+disentangle these concepts. 
+
